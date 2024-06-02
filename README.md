@@ -15,6 +15,7 @@ lua convert_schwab_cli.lua input.json output.ofx
 
 ## Web Browser Front-End UI
 
+- A live demo is hosted on a GitHub static page [here](https://ewmailing.github.io/Schwab2ofx/).
 - Click the Choose File button and select your .json file you downloaded from Schwab. The output file will be written to your browser's download directory.
 
 
@@ -33,7 +34,7 @@ I tested this exclusively with SEE Finance, but it will probably work with other
 I tested with a lot of transaction types, including more exotic things such as options trades, short sales, and foreign taxes. But since I only have access to my own data sets and Schwab does not document their schema, there may be transaction types that are unimplemented.
 
 
-#Key Files:
+# Key Files:
 * schwab2ofx.lua: The main library for converting to OFX
 * convert_schwab_cli.lua: Command line tool
 * index.html: Web Browser front end using Fengari

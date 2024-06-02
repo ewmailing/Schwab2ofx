@@ -800,7 +800,7 @@ local function generate_cash_dividend_capitalgain(cur_transaction, gain_type, in
 	local ticker_symbol = string.match(description_name, "%((%w+)%)")
 
 	if ticker_symbol == nil then
-		print("ERROR: ticker_symbol is nil, description_name:", description_name)
+		print("WARNING: ticker_symbol is nil in generate_cash_dividend_capitalgain, description_name:", description_name)
 		ticker_symbol = ""
 	end
 
