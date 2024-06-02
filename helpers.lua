@@ -6,7 +6,11 @@ function m.split_file_components(file_name)
 		--local base_pat = "(^.+)%." .. file_ext .. "$"
 		local base_pat = "^(.*)%." .. file_ext .. "$"
 		local file_basename = string.match(file_name, base_pat)
-		--[[
+		-- special case for filename with no dots
+		if not file_basename then
+			file_basename = file_name
+		end
+		-- [[
 		print("dir", file_dir)
 		print("name", file_name)
 		print("ext", file_ext)

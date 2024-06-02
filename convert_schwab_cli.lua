@@ -1,3 +1,4 @@
+#!/usr/bin/env lua
 local schwab2ofx = require("schwab2ofx")
 
 
