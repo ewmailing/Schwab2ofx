@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?OFX OFXHEADER="200" VERSION="200" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+
+<OFX>
+<!--
+
+    <SIGNONMSGSRSV1>
+        <SONRS>
+            <STATUS>
+                <CODE>0</CODE>
+                <SEVERITY>INFO</SEVERITY>
+            </STATUS>
+            <DTSERVER>20051029101003</DTSERVER>
+            <LANGUAGE>ENG</LANGUAGE>
+            <DTPROFUP>19991029101003</DTPROFUP>
+            <DTACCTUP>20031029101003</DTACCTUP>
+            <FI>
+                <ORG>NCH</ORG>
+                <FID>1001</FID>
+            </FI>
+        </SONRS>
+    </SIGNONMSGSRSV1>
+-->    
+
+
+    <INVSTMTMSGSRSV1>
+        <INVSTMTTRNRS>
+
+		<!-- SEE Finance seems to require an account number header info for import validation, even if we end up totally ignoring it. -->
+            <TRNUID>1001</TRNUID>
+            <STATUS>
+                <CODE>0</CODE>
+                <SEVERITY>INFO</SEVERITY>
+            </STATUS>
+            <INVSTMTRS>
+                <DTASOF>20050827010000</DTASOF>
+                <CURDEF>USD</CURDEF>
+                <INVACCTFROM>
+                    <BROKERID>121099999</BROKERID>
+                    <ACCTID>999988</ACCTID>
+                </INVACCTFROM>
+
+
+
+				<!-- OFX format seems to require 2 separate sections that both must exist. First section is the transactions (buy/sell), the second is the security information. Omitting the latter results in the Portfolio section from not appearing. -->
+
+                <INVTRANLIST>
+                    <CLOSUREOPT>
+                            <INVTRAN>
+<!--
+                                <FITID>23321</FITID>
+-->    
+                            <DTTRADE>20240719</DTTRADE>
+
+<!--
+                                <DTSETTLE>20050828</DTSETTLE>
+-->    
+                            </INVTRAN>
+
+                            <SECID>
+                                <UNIQUEID>XOM20240719P00105000</UNIQUEID>
+<!--
+                                <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+-->    
+                            </SECID>
+                            <UNITS>-1</UNITS>
+
+                        <OPTACTION>EXERCISE</OPTACTION>
+                    </CLOSUREOPT>
+
+                </INVTRANLIST>
+
+    <SECLISTMSGSRSV1>
+        <SECLIST>
+
+
+				<OPTINFO> <!--End of security ID-->
+					<SECINFO>
+						<SECID> <!--Security ID-->
+						   <UNIQUEID>XOM20240719P00105000</UNIQUEID><!--CUSIP for the option -->
+<!--
+						   <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+-->    
+						 </SECID>
+						<SECNAME>PUT EXXON MOBIL CORP $105 EXP 07/19/24</SECNAME> 
+			<!-- The docs imply that is might be the ticker of the underlying, but SEE Finance using it as the option identifer. -->
+						<TICKER>XOM20240719P00105000</TICKER> <!--Ticker symbol-->
+
+<!--
+						<FIID>0013</FIID> <!--FI internal security identifier-->
+-->    
+					</SECINFO>
+					<OPTTYPE>PUT</OPTTYPE> 
+					<STRIKEPRICE>105.00</STRIKEPRICE><!--Strike price $105/share-->
+
+					<DTEXPIRE>2024072024</DTEXPIRE><!--Option expires Jan 21, 2005--> 
+					<SHPERCTRCT>100</SHPERCTRCT> <!--100 shares per contract--> 
+
+
+					<!-- I think this section is supposed to be for the underlying -->
+					<SECID> <!--Security ID-->
+
+
+						<UNIQUEID>XOM</UNIQUEID><!--CUSIP for the underlying stock -->
+<!--
+
+						<UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE> </SECID>
+-->    
+						<ASSETCLASS>LARGESTOCK</ASSETCLASS><!--Large Capital Stock asset class-->
+					</SECID>
+					</OPTINFO>       
+
+
+				 </SECLIST>
+					</SECLISTMSGSRSV1>
+
+
+					</INVSTMTRS>
+			</INVSTMTTRNRS>
+    </INVSTMTMSGSRSV1>
+</OFX>
+
+

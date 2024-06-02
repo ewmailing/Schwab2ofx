@@ -1,0 +1,106 @@
+<html>
+<legend>
+This is a simple web browser frontend to convert Schwab Brokerage transaction history in JSON format to OFX.</p>
+It is built using Fengari to call the Lua library, schwab2ofx.</p>
+Login to your Schwab account and download your transaction history in JSON format.</p>
+Click the "Choose File" button and select your downloaded JSON file.</p>
+This app will create an OFX file and save it to your browser's download folder.</p>
+I wrote this because I was happily using DirectConnect/OFX at TD Ameritrade with SEE Finance, and then Schwab took over and terminated support for both DirectConnect and OFX. I learned Schwab killed these features for their own customers about 4 years ago.</p>
+I was looking for some workaround. You can download Schwab transactions in CSV, JSON, or XML if you directly log into your account. I looked for other tools that could convert this to OFX, but the only one that came close was csv2ofx, but it doesn't support brokerage transactions, only banking.
+I didn't know OFX, but I decided I would try to learn it and convert from JSON to OFX.</p>
+I learned basic OFX and wrote the schwab2ofx library in 2 days, and spent another half-day learning Fengari and how to build this UI. So there is a lot of room for this program to be better.</p>
+I tested this exclusively with SEE Finance, but it will probably work with other personal financial software that support OFX, such as GnuCash and MoneyDance.</p>
+I tested with a lot of transaction types, including more exotic things such as options trades, short sales, and foreign taxes. But since I only have access to my own data sets and Schwab does not document their schema, there may be transaction types that are unimplemented.</p>
+This is supposed to be a client-only application (i.e. this application converts your data directly inside your web browser on your computer and does not upload your data to a server for processing).</p>
+This code is open source and also comes with a command line version.</p>
+</legend> 
+
+<!-- Adapted from tutorial https://www.ucl.ac.uk/~rmhajc0/fengarilua.html -->
+<div><input type="file" id="file" accept=".json"></div>
+<script src='fengari-web.js' type="text/javascript" async></script>
+<script type="application/lua" async>
+local js = require "js"
+local window = js.global
+local document = window.document
+
+
+package.path = "?.lua"
+
+fileChooser=document:getElementById("file")
+fileChooser:addEventListener("change", function() read() end)
+
+local helpers = require("helpers")
+local schwab2ofx = require("schwab2ofx")
+
+function read()
+	myFile=fileChooser.files[0]
+	if myFile then
+		print("user selected file: ", myFile.name)
+
+		local file_dir, file_name, file_basename, file_ext = helpers.split_file_components(myFile.name)
+		--[[
+		print("dir", file_dir)
+		print("name", file_name)
+		print("ext", file_ext)
+		print("base", file_basename)
+		--]]
+
+		reader=js.new(window.FileReader)
+		reader.onload=function() 
+			--print("reader onload")
+			--print("reader", reader)
+			--print("reader.result", reader.result)
+
+			-- calling native JSON.parse triggers some error in Fengari about "undefined"
+			--local decoded_data = js.global.JSON.parse(reader.result)
+
+			local decoded_data = schwab2ofx.json_decode(reader.result)
+
+			assert(decoded_data, "json.decode failed on the input file")
+
+
+
+			--print("passed JSON decode")
+			--window.console:log(decoded_data)
+
+			-- TODO: Add text fields or some UI to allow the user to specify a custom account id.
+			-- Also should save/load from local storage (cookies) to remember previously specified values.
+			local optional_params = 
+			{
+				brokerID = "0",
+				accountID = "0",
+			}
+			local flattened_ofx_all = schwab2ofx.create_ofx(decoded_data, optional_params)
+			--print("flattened", flattened_ofx_all)
+
+			
+
+--			print("wrap up")
+			a=document:createElement("a")
+			--content=window:Array(reader.result)
+			content=window:Array(flattened_ofx_all)
+			contentType=js.new(window.Object)
+			contentType["type"]="text/plain"
+			savefile=js.new(window.Blob,content,contentType)
+			a.href=window.URL:createObjectURL(savefile)
+
+			local target_file = file_basename .. ".ofx"
+			print("target_file: ", target_file)
+			a.download=target_file
+			a:click()
+			--print("console log")
+			--window.console:log(a)
+			window.URL:revokeObjectURL(a.href)
+
+		end
+
+		reader:readAsText(myFile)
+--		window.console:log(reader)
+
+
+	else
+		print("myFile returned nil")
+	end
+end
+
+</script></html>

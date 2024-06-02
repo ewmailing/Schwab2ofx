@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?OFX OFXHEADER="200" VERSION="200" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+
+<OFX>
+<!--
+
+    <SIGNONMSGSRSV1>
+        <SONRS>
+            <STATUS>
+                <CODE>0</CODE>
+                <SEVERITY>INFO</SEVERITY>
+            </STATUS>
+            <DTSERVER>20051029101003</DTSERVER>
+            <LANGUAGE>ENG</LANGUAGE>
+            <DTPROFUP>19991029101003</DTPROFUP>
+            <DTACCTUP>20031029101003</DTACCTUP>
+            <FI>
+                <ORG>NCH</ORG>
+                <FID>1001</FID>
+            </FI>
+        </SONRS>
+    </SIGNONMSGSRSV1>
+-->    
+
+
+    <INVSTMTMSGSRSV1>
+        <INVSTMTTRNRS>
+
+		<!-- SEE Finance seems to require an account number header info for import validation, even if we end up totally ignoring it. -->
+            <TRNUID>1001</TRNUID>
+            <STATUS>
+                <CODE>0</CODE>
+                <SEVERITY>INFO</SEVERITY>
+            </STATUS>
+            <INVSTMTRS>
+                <DTASOF>20050827010000</DTASOF>
+                <CURDEF>USD</CURDEF>
+                <INVACCTFROM>
+                    <BROKERID>121099999</BROKERID>
+                    <ACCTID>999988</ACCTID>
+                </INVACCTFROM>
+
+
+
+				<!-- OFX format seems to require 2 separate sections that both must exist. First section is the transactions (buy/sell), the second is the security information. Omitting the latter results in the Portfolio section from not appearing. -->
+
+                <INVTRANLIST>
+                    <BUYSTOCK>
+                        <INVBUY>
+                            <INVTRAN>
+<!--
+                                <FITID>23321</FITID>
+-->    
+                            <DTTRADE>20240102</DTTRADE>
+							<MEMO>This is a memo</MEMO>
+
+<!--
+                                <DTSETTLE>20050828</DTSETTLE>
+-->    
+                            </INVTRAN>
+
+                            <SECID>
+                                <UNIQUEID>ACMA</UNIQUEID>
+<!--
+                                <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+-->    
+                            </SECID>
+                            <UNITS>100</UNITS>
+                            <UNITPRICE>50.00</UNITPRICE>
+                            <COMMISSION>25.00</COMMISSION>
+                            <TOTAL>-5025.00</TOTAL>
+                            <SUBACCTSEC>CASH</SUBACCTSEC>
+                            <SUBACCTFUND>CASH</SUBACCTFUND>
+
+
+                        </INVBUY>
+                        <BUYTYPE>BUY</BUYTYPE>
+                    </BUYSTOCK>
+
+                </INVTRANLIST>
+
+    <SECLISTMSGSRSV1>
+        <SECLIST>
+            <STOCKINFO>
+                <SECINFO>
+                    <SECID>
+                                <UNIQUEID>ACMA</UNIQUEID>
+<!--
+                                <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+-->    
+                    </SECID>
+                    <SECNAME>ACMA Development, Inc.</SECNAME>
+                    <TICKER>ACMA</TICKER>
+<!--
+
+                    <FIID>1024</FIID>
+-->    
+
+                </SECINFO>
+<!--
+
+                <YIELD>10</YIELD>
+-->  
+
+				<!-- SEE Finance does not seem to respond to this -->
+                <ASSETCLASS>LARGESTOCK</ASSETCLASS>
+--
+<!--
+These are not official, but trying to figure out if SEE Finance supports special keys to go along with its own categories. These do not work.
+                <SECURITYTYPE>Bond</SECURITYTYPE>
+                <SECURITY>Bond</SECURITY>
+-->
+            </STOCKINFO>
+        </SECLIST>
+    </SECLISTMSGSRSV1>
+
+
+            </INVSTMTRS>
+        </INVSTMTTRNRS>
+    </INVSTMTMSGSRSV1>
+</OFX>
+
