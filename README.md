@@ -13,7 +13,7 @@ The core functionality is written as a library in Lua. This also comes with an a
 lua convert_schwab_cli.lua input.json output.ofx
 ```
 
-## Web Browser Front-End UI
+## Web Browser Client-Only Front-End UI
 
 - A live demo is hosted on a GitHub static page [here](https://ewmailing.github.io/Schwab2ofx/).
 - Click the Choose File button and select your .json file you downloaded from Schwab. The output file will be written to your browser's download directory.
