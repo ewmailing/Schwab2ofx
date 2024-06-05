@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?OFX OFXHEADER="200" VERSION="200" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+
+<OFX>
+
+    <INVSTMTMSGSRSV1>
+        <INVSTMTTRNRS>
+
+		<!-- SEE Finance seems to require an account number header info for import validation, even if we end up totally ignoring it. -->
+            <TRNUID>1001</TRNUID>
+            <STATUS>
+                <CODE>0</CODE>
+                <SEVERITY>INFO</SEVERITY>
+            </STATUS>
+            <INVSTMTRS>
+                <DTASOF>20050827010000</DTASOF>
+                <CURDEF>USD</CURDEF>
+                <INVACCTFROM>
+                    <BROKERID>121099999</BROKERID>
+                    <ACCTID>999988</ACCTID>
+                </INVACCTFROM>
+
+
+
+				<!-- OFX format seems to require 2 separate sections that both must exist. First section is the transactions (buy/sell), the second is the security information. Omitting the latter results in the Portfolio section from not appearing. -->
+
+                <INVTRANLIST>
+					<TRANSFER>
+							<INVTRAN>
+								<DTTRADE>20240513</DTTRADE>
+								<MEMO>Internal Transfer: BARRICK GOLD CORP F</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>GOLD</UNIQUEID>
+							</SECID>
+							<TFERACTION>IN</TFERACTION>
+
+							<UNITS>100</UNITS>
+
+					</TRANSFER>
+
+                </INVTRANLIST>
+
+    <SECLISTMSGSRSV1>
+        <SECLIST>
+
+
+					<STOCKINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>GOLD</UNIQUEID>
+							</SECID>
+							<SECNAME>BARRICK GOLD CORP COM</SECNAME> 
+							<TICKER>GOLD</TICKER>
+						</SECINFO>
+							<!--
+								<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+							-->
+
+					</STOCKINFO>       
+
+
+				 </SECLIST>
+					</SECLISTMSGSRSV1>
+
+
+					</INVSTMTRS>
+			</INVSTMTTRNRS>
+    </INVSTMTMSGSRSV1>
+</OFX>
+
+

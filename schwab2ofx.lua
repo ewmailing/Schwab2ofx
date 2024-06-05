@@ -116,6 +116,61 @@ local function get_shares_per_contract(underlying_ticker)
 end
 
 
+local function create_position_for_underlying_from_option(cur_transaction, underlying_ticker_symbol, option_description, option_type_str, inout_position_map, ticker_company_map)
+
+	local ticker_symbol = underlying_ticker_symbol
+
+	if nil ~= inout_position_map[ticker_symbol] then
+		return
+	end
+
+
+
+	-- PUT EXXON MOBIL CORP $105 EXP 07/19/24 
+	-- option_type_str is either PUT or CALL
+	local security_name = string.match(option_description, option_type_str .. " (.+) %$(%d+) EXP %d+/%d+/%d+")
+	if security_name == nil then
+		security_name = ""
+	end
+	-- Lookup the company name by ticker in our outside database.
+	-- If the entry exists, prefer the database entry because the Schwab data isn't very good.
+	local db_entry = ticker_company_map[ticker_symbol]
+	if db_entry then
+		local company_name = db_entry.name
+		if company_name and company_name ~= "" then
+			security_name = company_name
+--			print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+		else
+--			print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+		end
+	else
+--		print("Did not find database entry for ticker: " .. ticker_symbol)
+	end
+
+
+	local position = [[
+					<STOCKINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+							<SECNAME>]] .. security_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
+						</SECINFO>
+							<!--
+								<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+							-->
+
+					</STOCKINFO>       
+]]
+
+
+	inout_position_map[ticker_symbol] = position
+
+
+
+end
+
 local function generate_option_buy(cur_transaction, is_to_open, inout_transaction_list, inout_position_map, ticker_company_map)
 
 	local ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str = split_option_components(cur_transaction)
@@ -212,7 +267,7 @@ local function generate_option_buy(cur_transaction, is_to_open, inout_transactio
 
 						<!-- I think this section is supposed to be for the underlying -->
 						<SECID>
-							<UNIQUEID></UNIQUEID>
+							<UNIQUEID>]] .. ticker .. [[</UNIQUEID>
 						</SECID>
 					</OPTINFO>       
 ]]
@@ -221,6 +276,7 @@ local function generate_option_buy(cur_transaction, is_to_open, inout_transactio
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 	inout_position_map[option_symbol] = position
 
+	create_position_for_underlying_from_option(cur_transaction, ticker, description_name, option_type_str, inout_position_map, ticker_company_map)
 end
 
 
@@ -320,10 +376,11 @@ local function generate_option_sell(cur_transaction, is_to_open, inout_transacti
 
 						<!-- I think this section is supposed to be for the underlying -->
 						<SECID>
-							<UNIQUEID></UNIQUEID>
+							<UNIQUEID>]] .. ticker .. [[</UNIQUEID>
 						</SECID>
 					</OPTINFO>       
 ]]
+	create_position_for_underlying_from_option(cur_transaction, ticker, description_name, option_type_str, inout_position_map, ticker_company_map)
 
 end
 
@@ -387,8 +444,13 @@ local function generate_option_assigned_exercised_expired(cur_transaction, which
 
 	local shares_per_contract_str = get_shares_per_contract(ticker)
 
---[=[
-	local position = [[
+
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[option_symbol] then
+		local position = [[
 					<OPTINFO>
 						<SECINFO>
 							<SECID> <!--Security ID-->
@@ -415,8 +477,9 @@ local function generate_option_assigned_exercised_expired(cur_transaction, which
 						</SECID>
 					</OPTINFO>       
 ]]
-	inout_position_map[option_symbol] = position
---]=]
+		inout_position_map[option_symbol] = position
+		create_position_for_underlying_from_option(cur_transaction, ticker, description_name, option_type_str, inout_position_map, ticker_company_map)
+	end
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 
@@ -677,14 +740,32 @@ local function generate_equity_sell(cur_transaction, inout_transaction_list, ino
 	-- There are a few cases where the description isn't a clean equity identifier, so I don't want to add it to the database.
 	-- My assumption is that the buy should have already created the entry.
 	-- And since I now have a separate SELLSHORT function, I don't need to worry about that case here.
---[=[
-	local position = [[
+	-- UPDATE: I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+		local sec_name = ""
+		local db_entry = ticker_company_map[ticker_symbol]
+		if db_entry then
+			local company_name = db_entry.name
+			if company_name and company_name ~= "" then
+				sec_name = company_name
+				--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+			else
+				--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+			end
+		else
+			--	print("Did not find database entry for ticker: " .. ticker_symbol)
+		end
+
+		local position = [[
 					<STOCKINFO>
 						<SECINFO>
 							<SECID> <!--Security ID-->
 								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
 							</SECID>
-							<SECNAME>]] .. description_name .. [[</SECNAME> 
+							<SECNAME>]] .. sec_name .. [[</SECNAME> 
 							<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
 						</SECINFO>
 							<!--
@@ -693,9 +774,8 @@ local function generate_equity_sell(cur_transaction, inout_transaction_list, ino
 
 					</STOCKINFO>       
 ]]
-	inout_position_map[ticker_symbol] = position
-
---]=]
+		inout_position_map[ticker_symbol] = position
+	end
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 
@@ -802,7 +882,46 @@ local function generate_cash_dividend_capitalgain(cur_transaction, gain_type, in
 	if ticker_symbol == nil then
 		print("WARNING: ticker_symbol is nil in generate_cash_dividend_capitalgain, description_name:", description_name)
 		ticker_symbol = ""
+	else
+
+		-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+		-- I speculated that this data would get filled in better during the initial order creation.
+		-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+		-- So check for nil and only add if not already in the map. 
+		if nil == inout_position_map[ticker_symbol] then
+			local sec_name = ""
+			local db_entry = ticker_company_map[ticker_symbol]
+			if db_entry then
+				local company_name = db_entry.name
+				if company_name and company_name ~= "" then
+					sec_name = company_name
+					--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+				else
+					--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+				end
+			else
+				--	print("Did not find database entry for ticker: " .. ticker_symbol)
+			end
+
+			local position = [[
+						<STOCKINFO>
+							<SECINFO>
+								<SECID> <!--Security ID-->
+									<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
+								</SECID>
+								<SECNAME>]] .. sec_name .. [[</SECNAME> 
+								<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
+							</SECINFO>
+								<!--
+									<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+								-->
+
+						</STOCKINFO>       
+			]]
+			inout_position_map[ticker_symbol] = position
+		end
 	end
+
 
 
 	-- This has the currency symbol, and potentially commas, and periods. Again, SEE Finance seems to handle that fine.
@@ -915,15 +1034,32 @@ local function generate_reinvest_dividend(cur_transaction, inout_transaction_lis
 					</INCOME>
 ]]
 
---[=[
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+		local sec_name = ""
+		local db_entry = ticker_company_map[ticker_symbol]
+		if db_entry then
+			local company_name = db_entry.name
+			if company_name and company_name ~= "" then
+				sec_name = company_name
+				--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+			else
+				--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+			end
+		else
+			--	print("Did not find database entry for ticker: " .. ticker_symbol)
+		end
 
-	local position = [[
+		local position = [[
 					<STOCKINFO>
 						<SECINFO>
 							<SECID> <!--Security ID-->
 								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
 							</SECID>
-							<SECNAME>]] .. description_name .. [[</SECNAME> 
+							<SECNAME>]] .. sec_name .. [[</SECNAME> 
 							<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
 						</SECINFO>
 							<!--
@@ -932,8 +1068,8 @@ local function generate_reinvest_dividend(cur_transaction, inout_transaction_lis
 
 					</STOCKINFO>       
 ]]
-	inout_position_map[ticker_symbol] = position
---]=]
+		inout_position_map[ticker_symbol] = position
+	end
 
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
@@ -1004,14 +1140,32 @@ local function generate_reinvest_shares(cur_transaction, inout_transaction_list,
 ]]
 
 
---[=[
-	local position = [[
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+		local sec_name = ""
+		local db_entry = ticker_company_map[ticker_symbol]
+		if db_entry then
+			local company_name = db_entry.name
+			if company_name and company_name ~= "" then
+				sec_name = company_name
+				--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+			else
+				--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+			end
+		else
+			--	print("Did not find database entry for ticker: " .. ticker_symbol)
+		end
+
+		local position = [[
 					<STOCKINFO>
 						<SECINFO>
 							<SECID> <!--Security ID-->
 								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
 							</SECID>
-							<SECNAME>]] .. description_name .. [[</SECNAME> 
+							<SECNAME>]] .. sec_name .. [[</SECNAME> 
 							<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
 						</SECINFO>
 							<!--
@@ -1020,8 +1174,8 @@ local function generate_reinvest_shares(cur_transaction, inout_transaction_list,
 
 					</STOCKINFO>       
 ]]
-	inout_position_map[ticker_symbol] = position
---]=]
+		inout_position_map[ticker_symbol] = position
+	end
 
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
@@ -1089,9 +1243,46 @@ local function generate_return_of_capital(cur_transaction, inout_transaction_lis
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 
+	-- I'm very worried about the reliability of this ticker symbol.
+	if ticker_symbol ~= nil and ticker_symbol ~= "" then
 
+		-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+		-- I speculated that this data would get filled in better during the initial order creation.
+		-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+		-- So check for nil and only add if not already in the map. 
+		if nil == inout_position_map[ticker_symbol] then
+		local sec_name = ""
+		local db_entry = ticker_company_map[ticker_symbol]
+		if db_entry then
+			local company_name = db_entry.name
+			if company_name and company_name ~= "" then
+				sec_name = company_name
+				--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+			else
+				--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+			end
+		else
+			--	print("Did not find database entry for ticker: " .. ticker_symbol)
+		end
 
+			local position = [[
+						<STOCKINFO>
+							<SECINFO>
+								<SECID> <!--Security ID-->
+									<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
+								</SECID>
+								<SECNAME>]] .. sec_name .. [[</SECNAME> 
+								<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
+							</SECINFO>
+								<!--
+									<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+								-->
 
+						</STOCKINFO>       
+]]
+			inout_position_map[ticker_symbol] = position
+		end
+	end
 end
 
 
@@ -1127,25 +1318,60 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 					</SELLDEBT>
 ]]
 
---[=[
-	local position = [[
+
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+		local debt_type = "COUPON"
+		if string.match(description_name, "BIL") then
+			debt_type = "ZERO"
+		end
+
+		local par_value = ""
+		if string.match(description_name, "US TREASURY") then
+			par_value = "1000.0"
+		end
+		--[[
+    {
+      "Date": "05/21/2024",
+      "Action": "Full Redemption",
+      "Symbol": "912797JX6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "-1,000",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": ""
+    },
+	--]]
+
+			local security_name = description_name
+			-- "US TREASURY BILXXX**MATURED**"
+			--print("description_name", description_name)
+			local extracted_security_name = string.match(description_name, "(.+)%*%*MATURED%*%*")
+			--print("bond name", extracted_security_name)
+
+			if extracted_security_name then
+				security_name = extracted_security_name
+			end
+
+		local position = [[
 					<DEBTINFO>
 						<SECINFO>
 							<SECID> <!--Security ID-->
-								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
 							</SECID>
-							<SECNAME>]] .. description_name .. [[</SECNAME> 
-							<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
+							<SECNAME>]] .. security_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
 						</SECINFO>
-
-							<!--
-								<ASSETCLASS>DOMESTICBOND</ASSETCLASS>
-							-->
+						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
+						<PARVALUE>]] .. par_value .. [[</PARVALUE>
 
 					</DEBTINFO>       
 ]]
-	inout_position_map[ticker_symbol] = position
---]=]
+		inout_position_map[ticker_symbol] = position
+	end
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 
@@ -1180,24 +1406,62 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
 					</SELLDEBT>
 ]]
 
---[=[
-	local position = [[
+
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+			local debt_type = "COUPON"
+			if string.match(description_name, "BIL") then
+				debt_type = "ZERO"
+			end
+
+			local par_value = ""
+			if string.match(description_name, "US TREASURY") then
+				par_value = "1000.0"
+			end
+			--[[
+    {
+      "Date": "05/21/2024",
+      "Action": "Full Redemption Adj",
+      "Symbol": "912797JX6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": "$1,000.00"
+    },
+
+		--]]
+
+			local security_name = description_name
+			-- "US TREASURY BILXXX**MATURED**"
+			--print("description_name", description_name)
+			local extracted_security_name = string.match(description_name, "(.+)%*%*MATURED%*%*")
+			--print("bond name", extracted_security_name)
+
+			if extracted_security_name then
+				security_name = extracted_security_name
+			end
+	
+
+			position = [[
 					<DEBTINFO>
 						<SECINFO>
 							<SECID> <!--Security ID-->
-								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
 							</SECID>
-							<SECNAME>]] .. description_name .. [[</SECNAME> 
-							<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
+							<SECNAME>]] .. security_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
 						</SECINFO>
-							<!--
-								<ASSETCLASS>DOMESTICBOND</ASSETCLASS>
-							-->
+						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
+						<PARVALUE>]] .. par_value .. [[</PARVALUE>
 
 					</DEBTINFO>       
 ]]
-	inout_position_map[ticker_symbol] = position
---]=]
+		inout_position_map[ticker_symbol] = position
+	end
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 
@@ -1291,10 +1555,12 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 	-- XOM, CCJ 01/17/2025 40.00 C, 912797KN6
 	local ticker_symbol = cur_transaction["Symbol"]
 	
+	local is_an_option = false
 	-- If the ticker symbol is an option, we need to convert it into canonical form so it remains consistent with the other uses elsewhere.
 	local ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str = split_option_components(cur_transaction)
 	if ticker and exp_year_str and exp_month_str and exp_day_str and strike_price_str and put_or_call_str then
 		ticker_symbol = compute_option_symbol(ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str)
+		is_an_option = true
 	end
 
 
@@ -1330,6 +1596,169 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
+
+
+
+
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map.
+	if nil == inout_position_map[ticker_symbol] then
+		local sec_name = ""
+		local db_entry = ticker_company_map[ticker_symbol]
+		if db_entry then
+			local company_name = db_entry.name
+			if company_name and company_name ~= "" then
+				sec_name = company_name
+				--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+			else
+				--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+			end
+		else
+			--	print("Did not find database entry for ticker: " .. ticker_symbol)
+		end
+
+
+
+		-- This case is harder because I don't know if I have a stock, option, or bond.
+		-- I read that stock tickers are max 5 characters.
+		-- I know options are of the format: ticker 2024 01 31 C 8-digits-for-strike
+		-- That means at [1-5] + 8 + 1 + 8
+		-- [1-5] + 17
+		-- min 18 characters, max 22 characters
+		-- US treasuries seem to have 9 characters. But looking up bonds in general, there don't seem to be any rules I can depend on.
+		
+
+		local position
+
+		if #ticker_symbol <= 5 then
+			position = [[
+					<STOCKINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+							<SECNAME>]] .. sec_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
+						</SECINFO>
+							<!--
+								<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+							-->
+
+					</STOCKINFO>       
+]]
+		elseif is_an_option then
+			--elseif #ticker_symbol >= 18 
+			--and string.match(ticker_symbol, "^%w+%d%d%d%d%d%d%d%d[CP]%d%d%d%d%d%d%d%d%$") then
+
+				local option_symbol = ticker_symbol
+				local human_friendly_symbol = cur_transaction["Symbol"]
+				local option_type_str
+				if put_or_call_str == "P" then
+					option_type_str = "PUT"
+				elseif put_or_call_str == "C" then
+					option_type_str = "CALL"
+				else
+					assert(false, "Value in string should have been C or P")
+				end
+				local expire_date = exp_year_str .. exp_month_str .. exp_day_str
+				local shares_per_contract_str = get_shares_per_contract(ticker)
+
+
+
+				position = [[
+					<OPTINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>]] .. option_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
+							</SECID>
+							<SECNAME>]] .. human_friendly_symbol .. [[</SECNAME> 
+
+							<!-- The docs imply that is might be the ticker of the underlying, but SEE Finance using it as the option identifer. -->
+							<TICKER>]] .. option_symbol .. [[</TICKER> <!--Ticker symbol-->
+						</SECINFO>
+						<OPTTYPE>]] .. option_type_str .. [[</OPTTYPE> 
+						<STRIKEPRICE>]] .. strike_price_str .. [[</STRIKEPRICE>
+
+						<DTEXPIRE>]] .. expire_date .. [[</DTEXPIRE> 
+						<SHPERCTRCT>]] .. shares_per_contract_str .. [[</SHPERCTRCT> <!--100 shares per contract--> 
+
+						<!-- I think this section is supposed to be for the underlying -->
+						<SECID> <!--Security ID-->
+							<UNIQUEID>]] .. ticker .. [[</UNIQUEID><!--CUSIP for the underlying stock -->
+							<!--
+								<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+							-->
+
+						</SECID>
+					</OPTINFO>       
+]]
+				create_position_for_underlying_from_option(cur_transaction, ticker, description_name, option_type_str, inout_position_map, ticker_company_map)
+
+
+		else
+			local debt_type = "COUPON"
+			if string.match(description_name, "BILL") then
+				debt_type = "ZERO"
+			end
+
+			local par_value = ""
+			if string.match(description_name, "US TREASURY") then
+				par_value = "1000.0"
+			end
+			--[[
+		{
+		  "Date": "05/13/2024",
+		  "Action": "Journaled Shares",
+		  "Symbol": "912797KE6",
+		  "Description": "TDA TRAN - TRANSFER OF SECURITY OR OPTION OUT (912797KE6), UNITED STATES TREASURY BILLS, 0%, due 06/11/2024",
+		  "Quantity": "-1,000",
+		  "Price": "",
+		  "Fees & Comm": "",
+		  "Amount": ""
+		},
+		--]]
+
+			local security_name = description_name
+			-- "TDA TRAN - TRANSFER OF SECURITY OR OPTION OUT (912797KE6), UNITED STATES TREASURY BILLS, 0%, due 06/11/2024"
+			local lead_in_str = "TDA TRAN %- TRANSFER OF SECURITY OR OPTION OUT %(" .. ticker_symbol .. "%)%, "
+			--print("lead in", lead_in_str)
+			--print("description_name", description_name)
+			local extracted_security_name = string.match(description_name, lead_in_str .. "(.*)")
+			--print("bond name", extracted_security_name)
+
+			if extracted_security_name then
+				security_name = extracted_security_name
+			end
+	
+
+			position = [[
+					<DEBTINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+							<SECNAME>]] .. security_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
+						</SECINFO>
+						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
+						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+
+					</DEBTINFO>       
+]]
+
+
+
+		end
+
+
+
+
+		inout_position_map[ticker_symbol] = position
+	end
+
+
 
 
 end

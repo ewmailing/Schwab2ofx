@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?OFX OFXHEADER="200" VERSION="200" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+
+<OFX>
+
+    <INVSTMTMSGSRSV1>
+        <INVSTMTTRNRS>
+
+		<!-- SEE Finance seems to require an account number header info for import validation, even if we end up totally ignoring it. -->
+            <TRNUID>1001</TRNUID>
+            <STATUS>
+                <CODE>0</CODE>
+                <SEVERITY>INFO</SEVERITY>
+            </STATUS>
+            <INVSTMTRS>
+                <DTASOF>20050827010000</DTASOF>
+                <CURDEF>USD</CURDEF>
+                <INVACCTFROM>
+                    <BROKERID>121099999</BROKERID>
+                    <ACCTID>999988</ACCTID>
+                </INVACCTFROM>
+
+
+
+				<!-- OFX format seems to require 2 separate sections that both must exist. First section is the transactions (buy/sell), the second is the security information. Omitting the latter results in the Portfolio section from not appearing. -->
+
+                <INVTRANLIST>
+					<TRANSFER>
+							<INVTRAN>
+								<DTTRADE>20240513</DTTRADE>
+								<MEMO>Journaled Shares: TDA TRAN - TRANSFER OF SECURITY OR OPTION OUT (MS May 17 2024 95.0 Call)</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>MS20240517C00095000</UNIQUEID>
+							</SECID>
+							<TFERACTION>OUT</TFERACTION>
+
+							<UNITS>-1</UNITS>
+
+					</TRANSFER>
+
+					<TRANSFER>
+							<INVTRAN>
+								<DTTRADE>20240513</DTTRADE>
+								<MEMO>Journaled Shares: TDA TRAN - TRANSFER OF SECURITY OR OPTION OUT (MS May 17 2024 90.0 Call)</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>MS20240517C00090000</UNIQUEID>
+							</SECID>
+							<TFERACTION>IN</TFERACTION>
+
+							<UNITS>1</UNITS>
+
+					</TRANSFER>
+
+
+					<TRANSFER>
+							<INVTRAN>
+								<DTTRADE>20240513</DTTRADE>
+								<MEMO>Internal Transfer: CALL MORGAN STANLEY $95 EXP 05/17/24</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>MS20240517C00095000</UNIQUEID>
+							</SECID>
+							<TFERACTION>IN</TFERACTION>
+
+							<UNITS>1</UNITS>
+
+					</TRANSFER>
+
+					<TRANSFER>
+							<INVTRAN>
+								<DTTRADE>20240513</DTTRADE>
+								<MEMO>Internal Transfer: CALL MORGAN STANLEY $90 EXP 05/17/24</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>MS20240517C00090000</UNIQUEID>
+							</SECID>
+							<TFERACTION>OUT</TFERACTION>
+
+							<UNITS>-1</UNITS>
+
+					</TRANSFER>
+
+                </INVTRANLIST>
+
+    <SECLISTMSGSRSV1>
+        <SECLIST>
+
+					<STOCKINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>MS</UNIQUEID>
+							</SECID>
+							<SECNAME>MORGAN STANLEY COM NEW</SECNAME> 
+							<TICKER>MS</TICKER>
+						</SECINFO>
+							<!--
+								<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+							-->
+
+							</STOCKINFO>   
+
+
+				<OPTINFO> <!--End of security ID-->
+					<SECINFO>
+						<SECID> <!--Security ID-->
+						   <UNIQUEID>MS20240517C00095000</UNIQUEID><!--CUSIP for the option -->
+<!--
+						   <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+-->    
+						 </SECID>
+						<SECNAME>CALL MORGAN STANLEY $95 EXP 05/17/24</SECNAME> 
+			<!-- The docs imply that is might be the ticker of the underlying, but SEE Finance using it as the option identifer. -->
+						<TICKER>MS20240517C00095000</TICKER> <!--Ticker symbol-->
+
+<!--
+						<FIID>0013</FIID> <!--FI internal security identifier-->
+-->    
+					</SECINFO>
+					<OPTTYPE>CALL</OPTTYPE> 
+					<STRIKEPRICE>95.00</STRIKEPRICE><!--Strike price $105/share-->
+
+					<DTEXPIRE>20240517</DTEXPIRE><!--Option expires Jan 21, 2005--> 
+					<SHPERCTRCT>100</SHPERCTRCT> <!--100 shares per contract--> 
+
+
+					<!-- I think this section is supposed to be for the underlying -->
+					<SECID> <!--Security ID-->
+
+
+						<UNIQUEID>MS</UNIQUEID><!--CUSIP for the underlying stock -->
+<!--
+
+						<UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE> </SECID>
+-->    
+						<ASSETCLASS>LARGESTOCK</ASSETCLASS><!--Large Capital Stock asset class-->
+					</SECID>
+					</OPTINFO>       
+
+
+				<OPTINFO> <!--End of security ID-->
+					<SECINFO>
+						<SECID> <!--Security ID-->
+						   <UNIQUEID>MS20240517C00090000</UNIQUEID><!--CUSIP for the option -->
+<!--
+						   <UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE>
+-->    
+						 </SECID>
+						<SECNAME>CALL MORGAN STANLEY $90 EXP 05/17/24</SECNAME> 
+			<!-- The docs imply that is might be the ticker of the underlying, but SEE Finance using it as the option identifer. -->
+						<TICKER>MS20240517C00090000</TICKER> <!--Ticker symbol-->
+
+<!--
+						<FIID>0013</FIID> <!--FI internal security identifier-->
+-->    
+					</SECINFO>
+					<OPTTYPE>CALL</OPTTYPE> 
+					<STRIKEPRICE>90.00</STRIKEPRICE><!--Strike price $105/share-->
+
+					<DTEXPIRE>20240517</DTEXPIRE><!--Option expires Jan 21, 2005--> 
+					<SHPERCTRCT>100</SHPERCTRCT> <!--100 shares per contract--> 
+
+
+					<!-- I think this section is supposed to be for the underlying -->
+					<SECID> <!--Security ID-->
+
+
+						<UNIQUEID>MS</UNIQUEID><!--CUSIP for the underlying stock -->
+<!--
+
+						<UNIQUEIDTYPE>CUSIP</UNIQUEIDTYPE> </SECID>
+-->    
+						<ASSETCLASS>LARGESTOCK</ASSETCLASS><!--Large Capital Stock asset class-->
+					</SECID>
+					</OPTINFO>       
+
+
+
+				 </SECLIST>
+					</SECLISTMSGSRSV1>
+
+
+					</INVSTMTRS>
+			</INVSTMTTRNRS>
+    </INVSTMTMSGSRSV1>
+</OFX>
+
+
