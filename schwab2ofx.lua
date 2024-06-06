@@ -2221,8 +2221,9 @@ function m.create_ofx(decoded_data, optional_params)
 
 	print("#array_of_brokerage_transactions", #array_of_brokerage_transactions)
 
-
-	local ticker_company_map = dofile(TICKER_TO_COMPANY_NAME_FILE)
+	local ticker_company_file = optional_params["tickerToCompanyFile"] or TICKER_TO_COMPANY_NAME_FILE
+	--print("ticker_company_file")
+	local ticker_company_map = dofile(ticker_company_file)
 
 
 
