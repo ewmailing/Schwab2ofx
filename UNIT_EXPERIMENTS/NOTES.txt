@@ -1,0 +1,11 @@
+The files in this directory are random little tests/experiments of me trying to figure out how to write a working .ofx file that will import something reasonable (tested mostly with SEE Finance, with one quick try with GNU Cash).
+
+Almost everything is copied directly from the official OFX Banking Specification PDF.
+
+There is a lot of boiler plate, including Account and Brokerage numbers, which are taken verbatim from the OFX Banking Specification PDF. These are not valid numbers so don't worry, I didn't accidentally use personal account information. For SEE Finance, it gives you a drop-down to select which account you want to import to, so I never needed to fill in a valid number.
+I don't even know where to look to figure out what the legitimate Schwab broker id is.
+
+For new event types or trying to fix bugs, I recommend trying to write a simple test/experiment here (add to the directory), before trying to implement it for real. I probably should have wrote more of these.
+
+
+
