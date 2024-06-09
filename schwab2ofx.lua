@@ -380,6 +380,11 @@ local function generate_option_sell(cur_transaction, is_to_open, inout_transacti
 						</SECID>
 					</OPTINFO>       
 ]]
+
+	inout_transaction_list[#inout_transaction_list+1] = transaction
+	inout_position_map[option_symbol] = position
+
+
 	create_position_for_underlying_from_option(cur_transaction, ticker, description_name, option_type_str, inout_position_map, ticker_company_map)
 
 end
