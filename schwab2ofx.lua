@@ -528,11 +528,20 @@ local function generate_bond_buy(cur_transaction, inout_transaction_list, inout_
 	end
 
 	local par_value = ""
-	if string.match(description_name, "US TREASURY") then
-		par_value = "1000.0"
+	local debt_class = ""
+	local asset_class = ""
+	-- US TREASURY or UNITED STATES TREASURY
+	if string.match(description_name, "S TREASURY") then
+		par_value = "100.0"
+		debt_class = "TREASURY"
+		asset_class = "DOMESTICBOND"
 	end
 
-	local security_name = description_name
+	local maturity_date = ""
+
+	local security_name
+	-- US TREASURY BILL24U S T BILL DUE 07/16/24
+	-- or
 	-- TDA TRAN - BUY TRADE (912797JV0), UNITED STATES TREASURY BILLS, 0%, due 05/07/2024 Bought 10M @99.1787
 	local lead_in_str = "TDA TRAN %- BUY TRADE %(" .. ticker_symbol .. "%)%, "
 	--print("lead in", lead_in_str)
@@ -543,9 +552,18 @@ local function generate_bond_buy(cur_transaction, inout_transaction_list, inout_
 
 	if extracted_security_name then
 		security_name = extracted_security_name
+		--print("extracted_security_name", security_name)
+		local m,d,y = string.match(security_name, "due (%d%d)/(%d%d)/(%d%d%d%d)")
+		maturity_date = compute_transaction_date_YYYYMMDD(y,m,d)
+		
+	else
+		security_name = description_name
+		--print("security_name", security_name)
+		local m,d,y = string.match(security_name, "DUE (%d%d)/(%d%d)/(%d%d)")
+		y="20"..y
+		maturity_date = compute_transaction_date_YYYYMMDD(y,m,d)
 	end
 	
-
 	-- Lookup the company name by ticker in our outside database.
 	-- If the entry exists, prefer the database entry because the Schwab data isn't very good.
 	local db_entry = ticker_company_map[ticker_symbol]
@@ -593,6 +611,9 @@ local function generate_bond_buy(cur_transaction, inout_transaction_list, inout_
 						</SECINFO>
 						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
 						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+						<DTMAT>]] .. maturity_date .. [[</DTMAT>
+						<DEBTCLASS>]] .. debt_class .. [[</DEBTCLASS>
+						<ASSETCLASS>]] .. asset_class .. [[</ASSETCLASS>
 
 					</DEBTINFO>       
 ]]
@@ -607,8 +628,12 @@ local function generate_equity_buy(cur_transaction, inout_transaction_list, inou
 	-- EXXON MOBIL CORP
 	local description_name =  cur_transaction["Description"]
 
-	if string.match(description_name, "S TREASURY") then
-
+	-- The Schwab schema doesn't have seperate types for bonds vs. equities.
+	-- T-Bills are popular right now since yields are the highest they've been in decades and the yield curve is inverted, so I want to handle those.
+	-- This heuristic may provide incorrect results if a stock or ETF matches this filter.
+	if string.match(description_name, "UNITED STATES TREASURY")
+		or string.match(description_name, "US TREASURY") 
+	then
 		generate_bond_buy(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 		return
 	end
@@ -1335,9 +1360,19 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 		end
 
 		local par_value = ""
-		if string.match(description_name, "US TREASURY") then
-			par_value = "1000.0"
+		local debt_class = ""
+		local asset_class = ""
+		-- US TREASURY or UNITED STATES TREASURY
+		if string.match(description_name, "S TREASURY") then
+			par_value = "100.0"
+			debt_class = "TREASURY"
+			asset_class = "DOMESTICBOND"
 		end
+
+		-- This is the redemption event, which means it is the maturity date
+		local maturity_date = trade_date_str
+
+
 		--[[
     {
       "Date": "05/21/2024",
@@ -1372,6 +1407,9 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 						</SECINFO>
 						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
 						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+						<DTMAT>]] .. maturity_date .. [[</DTMAT>
+						<DEBTCLASS>]] .. debt_class .. [[</DEBTCLASS>
+						<ASSETCLASS>]] .. asset_class .. [[</ASSETCLASS>
 
 					</DEBTINFO>       
 ]]
@@ -1424,7 +1462,7 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
 
 			local par_value = ""
 			if string.match(description_name, "US TREASURY") then
-				par_value = "1000.0"
+				par_value = "100.0"
 			end
 			--[[
     {
@@ -1710,7 +1748,7 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 
 			local par_value = ""
 			if string.match(description_name, "US TREASURY") then
-				par_value = "1000.0"
+				par_value = "100.0"
 			end
 			--[[
 		{
