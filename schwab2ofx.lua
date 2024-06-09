@@ -535,6 +535,23 @@ local function generate_bond_buy(cur_transaction, inout_transaction_list, inout_
 		par_value = "100.0"
 		debt_class = "TREASURY"
 		asset_class = "DOMESTICBOND"
+
+		-- I think Schwab has messed up the quantity.
+		-- But this is confusing.
+		-- Example: If you buy $10,000 worth of T-Bills
+		-- 1. The first confusing thing is that T-Bills must be bought in increments of $1000 (at auction).
+		-- So this would imply you need to buy 10 quantity ($10,000/$1,000 = 10).
+		-- 2. But the par value of a T-Bill seems to be $100 (i.e. the reported price per unit is something like $99.17).
+		-- So this would imply that the quantity shoud be $10,000/$100 = 100.
+		-- 3. But Schwab reports the quantity as 10,000 in this case.
+		-- I think Schwab's value is the most wrong.
+		-- Since finance software likes to compute their own values and bases everything on the price per unit,
+		-- I think the correct value needs to be #2 (divide by 100).
+		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		local units_str_without_comma = string.gsub(units_str, ",", "")
+		local units_num = tonumber(units_str_without_comma)
+		local fixed_units = units_num / 100
+		units_str = tostring(fixed_units)
 	end
 
 	local maturity_date = ""
@@ -631,8 +648,12 @@ local function generate_equity_buy(cur_transaction, inout_transaction_list, inou
 	-- The Schwab schema doesn't have seperate types for bonds vs. equities.
 	-- T-Bills are popular right now since yields are the highest they've been in decades and the yield curve is inverted, so I want to handle those.
 	-- This heuristic may provide incorrect results if a stock or ETF matches this filter.
-	if string.match(description_name, "UNITED STATES TREASURY")
-		or string.match(description_name, "US TREASURY") 
+	if string.match(description_name, "UNITED STATES TREASURY BILL")
+		or string.match(description_name, "US TREASURY BILL") 
+		or string.match(description_name, "UNITED STATES TREASURY BOND")
+		or string.match(description_name, "US TREASURY BOND") 
+		or string.match(description_name, "UNITED STATES TREASURY NOTE")
+		or string.match(description_name, "US TREASURY NOTE") 
 	then
 		generate_bond_buy(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 		return
@@ -729,14 +750,188 @@ end
 
 
 
-local function generate_equity_sell(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+
+
+local function generate_bond_sell(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+	--[[
+    {
+      "Date": "01/16/2024",
+      "Action": "Sell",
+      "Symbol": "912797HZ3",
+      "Description": "TDA TRAN - BONDS - REDEMPTION (912797HZ3), UNITED STATES TREASURY BILLS, 0%, due 01/16/2024 Sold 10M @100.0000",
+      "Quantity": "10,000",
+      "Price": "$100.00",
+      "Fees & Comm": "",
+      "Amount": "$10,000.00"
+    },
+--]]
+	local description_name =  cur_transaction["Description"]
+
+
 
 	-- 20240102
 	local trade_date_str = compute_transaction_date_YYYYMMDD( extract_transaction_date(cur_transaction) )
 	-- XOM
 	local ticker_symbol = cur_transaction["Symbol"]
+
+	-- Quantity may have commas and negative signs. SEE Finance seems to be okay with me passing these straight through.
+	local units_str = cur_transaction["Quantity"]
+	-- This has the currency symbol, and potentially commas, and periods. Again, SEE Finance seems to handle that fine.
+	local unit_price_str = cur_transaction["Price"]
+	local fee_str = cur_transaction["Fees & Comm"]
+	local total_amount_str = cur_transaction["Amount"]
+
+	-- SELLSHORT is now handled separately in its own function.
+	local sell_type = "SELL"
+
+
+
+	local debt_type = "COUPON"
+	if string.match(description_name, "BILL") then
+		debt_type = "ZERO"
+	end
+
+	local par_value = ""
+	local debt_class = ""
+	local asset_class = ""
+	-- US TREASURY or UNITED STATES TREASURY
+	if string.match(description_name, "S TREASURY") then
+		par_value = "100.0"
+		debt_class = "TREASURY"
+		asset_class = "DOMESTICBOND"
+
+		-- I think Schwab has messed up the quantity.
+		-- But this is confusing.
+		-- Example: If you buy $10,000 worth of T-Bills
+		-- 1. The first confusing thing is that T-Bills must be bought in increments of $1000 (at auction).
+		-- So this would imply you need to buy 10 quantity ($10,000/$1,000 = 10).
+		-- 2. But the par value of a T-Bill seems to be $100 (i.e. the reported price per unit is something like $99.17).
+		-- So this would imply that the quantity shoud be $10,000/$100 = 100.
+		-- 3. But Schwab reports the quantity as 10,000 in this case.
+		-- I think Schwab's value is the most wrong.
+		-- Since finance software likes to compute their own values and bases everything on the price per unit,
+		-- I think the correct value needs to be #2 (divide by 100).
+		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		local units_str_without_comma = string.gsub(units_str, ",", "")
+		local units_num = tonumber(units_str_without_comma)
+		local fixed_units = units_num / 100
+		units_str = tostring(fixed_units)
+	end
+
+	local maturity_date = ""
+
+	local security_name
+	-- FIXME: I don't have any examples of selling a treasury before maturity.
+	-- TDA TRAN - BONDS - REDEMPTION (912797HZ3), UNITED STATES TREASURY BILLS, 0%, due 01/16/2024 Sold 10M @100.0000
+	local lead_in_str = "TDA TRAN %- BONDS %- %w+ %(" .. ticker_symbol .. "%)%, "
+	--print("lead in", lead_in_str)
+	--print("description_name", description_name)
+	local extracted_security_name = string.match(description_name, lead_in_str .. "(.*) Sold ")
+	--print("bond name", extracted_security_name)
+
+	if extracted_security_name then
+		security_name = extracted_security_name
+		--print("extracted_security_name", security_name)
+		local m,d,y = string.match(security_name, "due (%d%d)/(%d%d)/(%d%d%d%d)")
+		maturity_date = compute_transaction_date_YYYYMMDD(y,m,d)
+	end
+	
+	
+
+	local transaction = [[
+					<SELLDEBT>
+						<INVSELL>
+							<INVTRAN>
+								<DTTRADE>]] .. trade_date_str .. [[</DTTRADE>
+								<MEMO>]] ..  "Sell bond: " .. description_name .. [[</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+
+							<UNITS>]] .. units_str .. [[</UNITS>
+							<UNITPRICE>]] .. unit_price_str .. [[</UNITPRICE>
+							<COMMISSION>]] .. fee_str .. [[</COMMISSION>
+							<TOTAL>]] .. total_amount_str .. [[</TOTAL>
+						</INVSELL>
+						<SELLTYPE>]] .. sell_type .. [[</SELLTYPE>
+					</SELLDEBT>
+]]
+
+
+
+
+	-- There are a few cases where the description isn't a clean equity identifier, so I don't want to add it to the database.
+	-- My assumption is that the buy should have already created the entry.
+	-- And since I now have a separate SELLSHORT function, I don't need to worry about that case here.
+	-- UPDATE: I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+		local db_entry = ticker_company_map[ticker_symbol]
+		if db_entry then
+			local company_name = db_entry.name
+			if company_name and company_name ~= "" then
+				security_name = company_name
+				--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+			else
+				--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+			end
+		else
+			--	print("Did not find database entry for ticker: " .. ticker_symbol)
+		end
+
+		local position = [[
+					<DEBTINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+							<SECNAME>]] .. security_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
+						</SECINFO>
+						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
+						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+						<DTMAT>]] .. maturity_date .. [[</DTMAT>
+						<DEBTCLASS>]] .. debt_class .. [[</DEBTCLASS>
+						<ASSETCLASS>]] .. asset_class .. [[</ASSETCLASS>
+
+					</DEBTINFO>       
+]]
+   
+		inout_position_map[ticker_symbol] = position
+	end
+
+	inout_transaction_list[#inout_transaction_list+1] = transaction
+end
+
+
+local function generate_equity_sell(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 	-- EXXON MOBIL CORP
 	local description_name =  cur_transaction["Description"]
+
+	-- The Schwab schema doesn't have seperate types for bonds vs. equities.
+	-- T-Bills are popular right now since yields are the highest they've been in decades and the yield curve is inverted, so I want to handle those.
+	-- This heuristic may provide incorrect results if a stock or ETF matches this filter.
+	if string.match(description_name, "UNITED STATES TREASURY BILL")
+		or string.match(description_name, "US TREASURY BILL") 
+		or string.match(description_name, "UNITED STATES TREASURY BOND")
+		or string.match(description_name, "US TREASURY BOND") 
+		or string.match(description_name, "UNITED STATES TREASURY NOTE")
+		or string.match(description_name, "US TREASURY NOTE") 
+	then
+		generate_bond_sell(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+		return
+	end
+
+
+
+
+	-- 20240102
+	local trade_date_str = compute_transaction_date_YYYYMMDD( extract_transaction_date(cur_transaction) )
+	-- XOM
+	local ticker_symbol = cur_transaction["Symbol"]
 
 	-- Quantity may have commas and negative signs. SEE Finance seems to be okay with me passing these straight through.
 	local units_str = cur_transaction["Quantity"]
@@ -1331,6 +1526,29 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 	-- This has the currency symbol, and potentially commas, and periods. Again, SEE Finance seems to handle that fine.
 
 
+	-- US TREASURY or UNITED STATES TREASURY
+	if string.match(description_name, "S TREASURY") then
+
+		-- I think Schwab has messed up the quantity.
+		-- But this is confusing.
+		-- Example: If you buy $10,000 worth of T-Bills
+		-- 1. The first confusing thing is that T-Bills must be bought in increments of $1000 (at auction).
+		-- So this would imply you need to buy 10 quantity ($10,000/$1,000 = 10).
+		-- 2. But the par value of a T-Bill seems to be $100 (i.e. the reported price per unit is something like $99.17).
+		-- So this would imply that the quantity shoud be $10,000/$100 = 100.
+		-- 3. But Schwab reports the quantity as 10,000 in this case.
+		-- I think Schwab's value is the most wrong.
+		-- Since finance software likes to compute their own values and bases everything on the price per unit,
+		-- I think the correct value needs to be #2 (divide by 100).
+		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		local units_str_without_comma = string.gsub(units_str, ",", "")
+		local units_num = tonumber(units_str_without_comma)
+		local fixed_units = units_num / 100
+		units_str = tostring(fixed_units)
+
+	end
+
+
 	local transaction = [[
 					<SELLDEBT>
 						<INVSELL>
@@ -1449,7 +1667,6 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
 					</SELLDEBT>
 ]]
 
-
 	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
 	-- I speculated that this data would get filled in better during the initial order creation.
 	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
@@ -1461,8 +1678,12 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
 			end
 
 			local par_value = ""
+			local debt_class = ""
+			local asset_class = ""
 			if string.match(description_name, "US TREASURY") then
 				par_value = "100.0"
+				debt_class = "TREASURY"
+				asset_class = "DOMESTICBOND"
 			end
 			--[[
     {
@@ -1477,6 +1698,10 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
     },
 
 		--]]
+	
+			-- This is the redemption event, which means it is the maturity date
+			local maturity_date = trade_date_str
+
 
 			local security_name = description_name
 			-- "US TREASURY BILXXX**MATURED**"
@@ -1500,6 +1725,9 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
 						</SECINFO>
 						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
 						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+						<DTMAT>]] .. maturity_date .. [[</DTMAT>
+						<DEBTCLASS>]] .. debt_class .. [[</DEBTCLASS>
+						<ASSETCLASS>]] .. asset_class .. [[</ASSETCLASS>
 
 					</DEBTINFO>       
 ]]
@@ -1617,6 +1845,38 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 	local in_or_out = "IN"
 	if string.match(units_str, "%-") then
 		in_or_out = "OUT"
+	end
+
+
+
+	-- The Schwab schema doesn't have seperate types for bonds vs. equities.
+	-- T-Bills are popular right now since yields are the highest they've been in decades and the yield curve is inverted, so I want to handle those.
+	-- This heuristic may provide incorrect results if a stock or ETF matches this filter.
+	if string.match(description_name, "UNITED STATES TREASURY BILL")
+		or string.match(description_name, "US TREASURY BILL") 
+		or string.match(description_name, "UNITED STATES TREASURY BOND")
+		or string.match(description_name, "US TREASURY BOND") 
+		or string.match(description_name, "UNITED STATES TREASURY NOTE")
+		or string.match(description_name, "US TREASURY NOTE") 
+	then
+
+		-- I think Schwab has messed up the quantity.
+		-- But this is confusing.
+		-- Example: If you buy $10,000 worth of T-Bills
+		-- 1. The first confusing thing is that T-Bills must be bought in increments of $1000 (at auction).
+		-- So this would imply you need to buy 10 quantity ($10,000/$1,000 = 10).
+		-- 2. But the par value of a T-Bill seems to be $100 (i.e. the reported price per unit is something like $99.17).
+		-- So this would imply that the quantity shoud be $10,000/$100 = 100.
+		-- 3. But Schwab reports the quantity as 10,000 in this case.
+		-- I think Schwab's value is the most wrong.
+		-- Since finance software likes to compute their own values and bases everything on the price per unit,
+		-- I think the correct value needs to be #2 (divide by 100).
+		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		local units_str_without_comma = string.gsub(units_str, ",", "")
+		local units_num = tonumber(units_str_without_comma)
+		local fixed_units = units_num / 100
+		units_str = tostring(fixed_units)
+
 	end
 
 
@@ -1747,8 +2007,12 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 			end
 
 			local par_value = ""
+			local debt_class = ""
+			local asset_class = ""
 			if string.match(description_name, "US TREASURY") then
 				par_value = "100.0"
+				debt_class = "TREASURY"
+				asset_class = "DOMESTICBOND"
 			end
 			--[[
 		{
@@ -1763,6 +2027,7 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 		},
 		--]]
 
+			local maturity_date = ""
 			local security_name = description_name
 			-- "TDA TRAN - TRANSFER OF SECURITY OR OPTION OUT (912797KE6), UNITED STATES TREASURY BILLS, 0%, due 06/11/2024"
 			local lead_in_str = "TDA TRAN %- TRANSFER OF SECURITY OR OPTION OUT %(" .. ticker_symbol .. "%)%, "
@@ -1773,6 +2038,8 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 
 			if extracted_security_name then
 				security_name = extracted_security_name
+				local m,d,y = string.match(security_name, "due (%d%d)/(%d%d)/(%d%d%d%d)")
+				maturity_date = compute_transaction_date_YYYYMMDD(y,m,d)
 			end
 	
 
@@ -1787,6 +2054,9 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 						</SECINFO>
 						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
 						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+						<DTMAT>]] .. maturity_date .. [[</DTMAT>
+						<DEBTCLASS>]] .. debt_class .. [[</DEBTCLASS>
+						<ASSETCLASS>]] .. asset_class .. [[</ASSETCLASS>
 
 					</DEBTINFO>       
 ]]
