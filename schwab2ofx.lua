@@ -67,11 +67,27 @@ local function split_option_components(cur_transaction)
 	return ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str
 end
 
+-- canonical option format:
+-- KGC250117C00005500
+-- for KGC 2025 Jan 17 Call $5.50 strike
 local function compute_option_symbol(ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str)
 	local strike_price_num = tonumber(strike_price_str)
 	local shifted_num = 1000 * strike_price_num
 	local padded_strike_str = string.format("%08d", shifted_num)
-	local option_symbol = ticker .. exp_year_str .. exp_month_str .. exp_day_str .. put_or_call_str .. padded_strike_str
+
+	-- Assumption: I got 4 digit year. Canonical format uses only last 2 digits.
+	--assert(#exp_year_str == 4, "This code has been written to assume 4-digit years. Something is broken.")
+	--print("exp_year_str", exp_year_str)
+	
+	local lower_year_digits
+	if #exp_year_str == 2 then
+		lower_year_digits = exp_year_str
+	else
+		lower_year_digits = string.match(exp_year_str, "%d%d(%d%d)")
+	end
+	--print("lower_year_digits", lower_year_digits)
+
+	local option_symbol = ticker .. lower_year_digits .. exp_month_str .. exp_day_str .. put_or_call_str .. padded_strike_str
 
 	return option_symbol
 end
