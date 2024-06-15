@@ -49,7 +49,7 @@ local function main()
 	if target_file_name == nil then
 		local helpers = require("helpers")
 		local file_dir, file_name, file_basename, file_ext = helpers.split_file_components(source_file_name)
-		target_file_name = file_basename .. ".ofx"
+		target_file_name = file_dir .. file_basename .. ".ofx"
 	end
 
 	local decoded_data = load_source_file(source_file_name)
