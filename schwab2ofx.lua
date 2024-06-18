@@ -564,10 +564,16 @@ local function generate_bond_buy(cur_transaction, inout_transaction_list, inout_
 		-- Since finance software likes to compute their own values and bases everything on the price per unit,
 		-- I think the correct value needs to be #2 (divide by 100).
 		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		-- UPDATE2: I've disabled the adjustment because I think once I define PARVALUE, SEE Finance automatically adjusts everything correctly,
+		-- and my adjustment after that screws up everything.
+		-- So I think the real solution is I need to define PARVALUE for all bonds, but Schwab doesn't give me that information.
+		-- I suspect the SEE Finance implicit default is $1.00.
+		--[[
 		local units_str_without_comma = string.gsub(units_str, ",", "")
 		local units_num = tonumber(units_str_without_comma)
-		local fixed_units = units_num / 100
+		local fixed_units = units_num / 100.0
 		units_str = tostring(fixed_units)
+		--]]
 	end
 
 	local maturity_date = ""
@@ -828,10 +834,16 @@ local function generate_bond_sell(cur_transaction, inout_transaction_list, inout
 		-- Since finance software likes to compute their own values and bases everything on the price per unit,
 		-- I think the correct value needs to be #2 (divide by 100).
 		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		-- UPDATE2: I've disabled the adjustment because I think once I define PARVALUE, SEE Finance automatically adjusts everything correctly,
+		-- and my adjustment after that screws up everything.
+		-- So I think the real solution is I need to define PARVALUE for all bonds, but Schwab doesn't give me that information.
+		-- I suspect the SEE Finance implicit default is $1.00.
+		--[[
 		local units_str_without_comma = string.gsub(units_str, ",", "")
 		local units_num = tonumber(units_str_without_comma)
-		local fixed_units = units_num / 100
+		local fixed_units = units_num / 100.0
 		units_str = tostring(fixed_units)
+		--]]
 	end
 
 	local maturity_date = ""
@@ -1621,6 +1633,9 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 	-- This has the currency symbol, and potentially commas, and periods. Again, SEE Finance seems to handle that fine.
 
 
+	local action_field = cur_transaction["Action"]
+
+
 	-- US TREASURY or UNITED STATES TREASURY
 	if string.match(description_name, "S TREASURY") then
 
@@ -1636,12 +1651,23 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 		-- Since finance software likes to compute their own values and bases everything on the price per unit,
 		-- I think the correct value needs to be #2 (divide by 100).
 		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		-- UPDATE: I disabled this on the redemptions because my numbers are getting screwed up again.
+		-- My theory is that once I reported the par-value in the position info, SEE Finance may be auto-calculating the adjustment on the redemption.
+		-- Thus my shares of 200.00 are getting converted to 2.
+		-- So I need to disable the adjustment here. I don't understand why Buy doesn't get the same adjustment.
+		-- UPDATE2: I've disabled the adjustment because I think once I define PARVALUE, SEE Finance automatically adjusts everything correctly,
+		-- and my adjustment after that screws up everything.
+		-- So I think the real solution is I need to define PARVALUE for all bonds, but Schwab doesn't give me that information.
+		-- I suspect the SEE Finance implicit default is $1.00.
+		--[[
 		local units_str_without_comma = string.gsub(units_str, ",", "")
 		local units_num = tonumber(units_str_without_comma)
-		local fixed_units = units_num / 100
+		local fixed_units = units_num / 100.0
 		units_str = tostring(fixed_units)
+		--]]
 
 	end
+
 
 
 	local transaction = [[
@@ -1649,7 +1675,7 @@ local function generate_full_redemption(cur_transaction, inout_transaction_list,
 						<INVSELL>
 							<INVTRAN>
 								<DTTRADE>]] .. trade_date_str .. [[</DTTRADE>
-								<MEMO>]] .. description_name .. [[</MEMO>
+								<MEMO>]] .. action_field .. ": " .. description_name .. [[</MEMO>
                             </INVTRAN>							
 							<SECID>
 								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
@@ -1833,6 +1859,187 @@ local function generate_full_redemption_adj(cur_transaction, inout_transaction_l
 
 end
 
+
+
+		-- HACK: Special case handling.
+		-- Schwab is generating 2 separate events for bond maturity.
+		-- I first see "Full Redemption Adj", followed immediately by "Full Redemption"
+		--[[     {
+      "Date": "06/11/2024",
+      "Action": "Full Redemption Adj",
+      "Symbol": "912797KE6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": "$10,000.00"
+    },
+    {
+      "Date": "06/11/2024",
+      "Action": "Full Redemption",
+      "Symbol": "912797KE6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "-10,000",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": ""
+    },
+	--]]
+		-- The former has an amount, the latter has a quantity.
+		-- In addition, I think Schwab is putting the incorrect quantity because it is not adjusting for par value.
+		-- All this combined is leading to errors when I import into SEE Finance.
+		-- I think the solution is to try to merge these two events.
+		-- Since I do not have any guarantees that both these events will appear and will be back-to-back,
+		-- I need to test for back-to-back, and if not, fall back to the original indivual handling.
+-- cur_transaction is the "Full Redemption"
+-- prev_transaction is the "Full Redemption Adj" 
+local function generate_full_redemption_combined_paired_transaction(cur_transaction, prev_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+
+	-- 20240102
+	local trade_date_str = compute_transaction_date_YYYYMMDD( extract_transaction_date(cur_transaction) )
+	-- 912797JX6
+	local ticker_symbol = cur_transaction["Symbol"]
+	-- US TREASURY BILXXX**MATURED**
+	local description_name =  cur_transaction["Description"]
+
+	-- Quantity may have commas and negative signs. SEE Finance seems to be okay with me passing these straight through.
+	local units_str = cur_transaction["Quantity"]
+	-- This has the currency symbol, and potentially commas, and periods. Again, SEE Finance seems to handle that fine.
+
+
+	local action_field = cur_transaction["Action"]
+
+	local total_amount_str = prev_transaction["Amount"]
+
+	local unit_price_str = ""
+	-- US TREASURY or UNITED STATES TREASURY
+	if string.match(description_name, "S TREASURY") then
+
+		-- I think Schwab has messed up the quantity.
+		-- But this is confusing.
+		-- Example: If you buy $10,000 worth of T-Bills
+		-- 1. The first confusing thing is that T-Bills must be bought in increments of $1000 (at auction).
+		-- So this would imply you need to buy 10 quantity ($10,000/$1,000 = 10).
+		-- 2. But the par value of a T-Bill seems to be $100 (i.e. the reported price per unit is something like $99.17).
+		-- So this would imply that the quantity shoud be $10,000/$100 = 100.
+		-- 3. But Schwab reports the quantity as 10,000 in this case.
+		-- I think Schwab's value is the most wrong.
+		-- Since finance software likes to compute their own values and bases everything on the price per unit,
+		-- I think the correct value needs to be #2 (divide by 100).
+		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		-- UPDATE: I disabled this on the redemptions because my numbers are getting screwed up again.
+		-- My theory is that once I reported the par-value in the position info, SEE Finance may be auto-calculating the adjustment on the redemption.
+		-- Thus my shares of 200.00 are getting converted to 2.
+		-- So I need to disable the adjustment here. I don't understand why Buy doesn't get the same adjustment.
+		-- UPDATE2: I've disabled the adjustment because I think once I define PARVALUE, SEE Finance automatically adjusts everything correctly,
+		-- and my adjustment after that screws up everything.
+		-- So I think the real solution is I need to define PARVALUE for all bonds, but Schwab doesn't give me that information.
+		-- I suspect the SEE Finance implicit default is $1.00.
+		--[[
+		local units_str_without_comma = string.gsub(units_str, ",", "")
+		local units_num = tonumber(units_str_without_comma)
+		local fixed_units = units_num / 100.0
+		units_str = tostring(fixed_units)
+		--]]
+
+		unit_price_str = "100.00"
+
+	end
+
+
+	local transaction = [[
+					<SELLDEBT>
+						<INVSELL>
+							<INVTRAN>
+								<DTTRADE>]] .. trade_date_str .. [[</DTTRADE>
+								<MEMO>]] .. "Full Redemption+Adj: " .. description_name .. [[</MEMO>
+                            </INVTRAN>							
+							<SECID>
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+
+							<UNITS>]] .. units_str .. [[</UNITS>
+							<UNITPRICE>]] .. unit_price_str .. [[</UNITPRICE>
+							<TOTAL>]] .. total_amount_str .. [[</TOTAL>
+						</INVSELL>
+						<SELLREASON>MATURITY</SELLREASON>
+					</SELLDEBT>
+]]
+
+
+	-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+	-- I speculated that this data would get filled in better during the initial order creation.
+	-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+	-- So check for nil and only add if not already in the map. 
+	if nil == inout_position_map[ticker_symbol] then
+		local debt_type = "COUPON"
+		if string.match(description_name, "BIL") then
+			debt_type = "ZERO"
+		end
+
+		local par_value = ""
+		local debt_class = ""
+		local asset_class = ""
+		-- US TREASURY or UNITED STATES TREASURY
+		if string.match(description_name, "S TREASURY") then
+			par_value = "100.0"
+			debt_class = "TREASURY"
+			asset_class = "DOMESTICBOND"
+		end
+
+		-- This is the redemption event, which means it is the maturity date
+		local maturity_date = trade_date_str
+
+
+		--[[
+    {
+      "Date": "05/21/2024",
+      "Action": "Full Redemption",
+      "Symbol": "912797JX6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "-1,000",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": ""
+    },
+	--]]
+
+			local security_name = description_name
+			-- "US TREASURY BILXXX**MATURED**"
+			--print("description_name", description_name)
+			local extracted_security_name = string.match(description_name, "(.+)%*%*MATURED%*%*")
+			--print("bond name", extracted_security_name)
+
+			if extracted_security_name then
+				security_name = extracted_security_name
+			end
+
+		local position = [[
+					<DEBTINFO>
+						<SECINFO>
+							<SECID> <!--Security ID-->
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
+							<SECNAME>]] .. security_name .. [[</SECNAME> 
+							<TICKER>]] .. ticker_symbol .. [[</TICKER>
+						</SECINFO>
+						<DEBTTYPE>]] .. debt_type .. [[</DEBTTYPE>
+						<PARVALUE>]] .. par_value .. [[</PARVALUE>
+						<DTMAT>]] .. maturity_date .. [[</DTMAT>
+						<DEBTCLASS>]] .. debt_class .. [[</DEBTCLASS>
+						<ASSETCLASS>]] .. asset_class .. [[</ASSETCLASS>
+
+					</DEBTINFO>       
+]]
+		inout_position_map[ticker_symbol] = position
+	end
+
+	inout_transaction_list[#inout_transaction_list+1] = transaction
+
+end
+
+
+
 local function generate_funds(cur_transaction, action_name, inout_transaction_list, inout_position_map, ticker_company_map)
 
 
@@ -1967,11 +2174,16 @@ local function generate_internal_transfer_with_symbol_and_quantity(cur_transacti
 		-- Since finance software likes to compute their own values and bases everything on the price per unit,
 		-- I think the correct value needs to be #2 (divide by 100).
 		-- use string.gsub to remove the commas. It returns two values, one is the converted string, and the other is the count of conversions.
+		-- UPDATE2: I've disabled the adjustment because I think once I define PARVALUE, SEE Finance automatically adjusts everything correctly,
+		-- and my adjustment after that screws up everything.
+		-- So I think the real solution is I need to define PARVALUE for all bonds, but Schwab doesn't give me that information.
+		-- I suspect the SEE Finance implicit default is $1.00.
+		--[[
 		local units_str_without_comma = string.gsub(units_str, ",", "")
 		local units_num = tonumber(units_str_without_comma)
-		local fixed_units = units_num / 100
+		local fixed_units = units_num / 100.0
 		units_str = tostring(fixed_units)
-
+		--]]
 	end
 
 
@@ -2503,7 +2715,7 @@ local function generate_journal(cur_transaction, inout_transaction_list, inout_p
 end
 
 
-local function generate_ofx_brokerage_transaction(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+local function generate_ofx_brokerage_transaction(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map, array_of_brokerage_transactions, cur_idx)
 
 	local action_field = cur_transaction["Action"]
 	local symbol_field = cur_transaction["Symbol"]
@@ -2585,10 +2797,67 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 
 
 	-- bond maturity
-	elseif action_field == "Full Redemption" then
-		generate_full_redemption(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Full Redemption Adj" then
+
+		-- HACK: Special case handling.
+		-- Schwab is generating 2 separate events for bond maturity.
+		-- I first see "Full Redemption Adj", followed immediately by "Full Redemption"
+		--[[     {
+      "Date": "06/11/2024",
+      "Action": "Full Redemption Adj",
+      "Symbol": "912797KE6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": "$10,000.00"
+    },
+    {
+      "Date": "06/11/2024",
+      "Action": "Full Redemption",
+      "Symbol": "912797KE6",
+      "Description": "US TREASURY BILXXX**MATURED**",
+      "Quantity": "-10,000",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": ""
+    },
+	--]]
+		-- The former has an amount, the latter has a quantity.
+		-- In addition, I think Schwab is putting the incorrect quantity because it is not adjusting for par value.
+		-- All this combined is leading to errors when I import into SEE Finance.
+		-- I think the solution is to try to merge these two events.
+		-- Since I do not have any guarantees that both these events will appear and will be back-to-back,
+		-- I need to test for back-to-back, and if not, fall back to the original indivual handling.
+		local next_transaction = array_of_brokerage_transactions[cur_idx+1]
+
+		if next_transaction ~= nil then
+			local next_action_field = next_transaction["Action"]
+			if next_action_field == "Full Redemption" then
+				-- We will do the combined pair handling on the next loop
+				return
+			end
+		end
+
+		-- Else: we fallback and do the original individual item handling
 		generate_full_redemption_adj(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+	elseif action_field == "Full Redemption" then
+
+		local prev_transaction = array_of_brokerage_transactions[cur_idx-1]
+		
+		if prev_transaction ~= nil then
+			local prev_action_field = prev_transaction["Action"]
+			if prev_action_field == "Full Redemption Adj" then
+				-- We will do the combined pair handling on the prev loop
+
+				generate_full_redemption_combined_paired_transaction(cur_transaction, prev_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+
+				return
+			end
+		end
+
+		-- Else: we fallback and do the original individual item handling
+		generate_full_redemption(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 		
 
 	elseif action_field == "Return Of Capital" then
@@ -2625,6 +2894,11 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 end
 
 
+local function check_for_pair_transaction(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map, i)
+
+end
+
+
 -- decoded_data is after the Schwab JSON data has been decoded and converted into a Lua table.
 -- optional_params is a table, with string keys. 
 	-- Only brokerID & accountID are defined right now.
@@ -2648,7 +2922,7 @@ function m.create_ofx(decoded_data, optional_params)
 
 		local cur_transaction = array_of_brokerage_transactions[i]
 
-		generate_ofx_brokerage_transaction(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+		generate_ofx_brokerage_transaction(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map, array_of_brokerage_transactions, i)
 
 
 	end
