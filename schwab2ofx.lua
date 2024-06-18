@@ -1117,10 +1117,14 @@ local function generate_cash_dividend_capitalgain(cur_transaction, gain_type, in
 
 	-- TDA TRAN - ORDINARY DIVIDEND (SNSXX)
 	local description_name =  cur_transaction["Description"]
-	-- Strip out the ticker from the Description
-	local ticker_symbol = string.match(description_name, "%((%w+)%)")
 
-	if ticker_symbol == nil then
+	local ticker_symbol = cur_transaction["Symbol"]
+	if ticker_symbol == "" or ticker_symbol == nil then
+		-- Strip out the ticker from the Description
+		ticker_symbol = string.match(description_name, "%((%w+)%)")
+	end
+
+	if ticker_symbol == nil or ticker_symbol == "" then
 		print("WARNING: ticker_symbol is nil in generate_cash_dividend_capitalgain, description_name:", description_name)
 		ticker_symbol = ""
 	else
@@ -1169,25 +1173,20 @@ local function generate_cash_dividend_capitalgain(cur_transaction, gain_type, in
 	local total_amount_str = cur_transaction["Amount"]
 
 
-	
-
-
 	local transaction = [[
 					<INCOME>
 							<INVTRAN>
 								<DTTRADE>]] .. trade_date_str .. [[</DTTRADE>
 								<MEMO>]] .. gain_type .. ": " .. description_name .. [[</MEMO>
-                            </INVTRAN>							
-                            <SECID>
-                                <UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
-                            </SECID>
+							</INVTRAN>							
+							<SECID>
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
 
 							<INCOMETYPE>]] .. gain_type .. [[</INCOMETYPE>
 							<TOTAL>]] .. total_amount_str .. [[</TOTAL>
 					</INCOME>
 ]]
-
-
 	inout_transaction_list[#inout_transaction_list+1] = transaction
 
 
@@ -1264,11 +1263,9 @@ local function generate_reinvest_dividend(cur_transaction, inout_transaction_lis
 								<DTTRADE>]] .. trade_date_str .. [[</DTTRADE>
 								<MEMO>]] .. action_field .. ": " .. description_name .. [[</MEMO>
                             </INVTRAN>
-<!--
 							<SECID>
 								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
 							</SECID>
--->
 							<INCOMETYPE>DIV</INCOMETYPE>
 
 							<TOTAL>]] .. total_amount_str .. [[</TOTAL>
@@ -1423,6 +1420,28 @@ local function generate_reinvest_shares(cur_transaction, inout_transaction_list,
 
 end
 
+--[[
+    {
+      "Date": "03/15/2023",
+      "Action": "Foreign Tax Reclaim",
+      "Symbol": "",
+      "Description": "TDA TRAN - FOREIGN TAX WITHHELD (GOLD)",
+      "Quantity": "",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": "-$1.50"
+    },
+    {
+      "Date": "06/17/2024",
+      "Action": "Foreign Tax Paid",
+      "Symbol": "GOLD",
+      "Description": "BARRICK GOLD CORP F",
+      "Quantity": "",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": "-$1.50"
+    },
+--]]
 local function generate_foreign_tax(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 	-- 20240102
 	local trade_date_str = compute_transaction_date_YYYYMMDD( extract_transaction_date(cur_transaction) )
@@ -1431,20 +1450,80 @@ local function generate_foreign_tax(cur_transaction, inout_transaction_list, ino
 	-- This has the currency symbol, and potentially commas, and periods. Again, SEE Finance seems to handle that fine.
 	local total_amount_str = cur_transaction["Amount"]
 
+	local ticker_symbol = cur_transaction["Symbol"]
+	if ticker_symbol == "" or ticker_symbol == nil then
+		-- Strip out the ticker from the Description
+		ticker_symbol = string.match(description_name, "%((%w+)%)")
+	end
+
+	local action_field = cur_transaction["Action"]
+
+
+
 	local transaction = [[
-					<INCOME>
+					<INVEXPENSE>
 							<INVTRAN>
 								<DTTRADE>]] .. trade_date_str .. [[</DTTRADE>
-								<MEMO>]] .. description_name .. [[</MEMO>
+								<MEMO>]] .. action_field .. ": " .. description_name .. [[</MEMO>
                             </INVTRAN>							
+							<SECID>
+								<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID>
+							</SECID>
 
 							<INCOMETYPE>MISC</INCOMETYPE>
 							<TOTAL>]] .. total_amount_str .. [[</TOTAL>
 							<TAXES>]] .. total_amount_str .. [[</TAXES>
-					</INCOME>
+					</INVEXPENSE>
 ]]
 
 	inout_transaction_list[#inout_transaction_list+1] = transaction
+
+
+	if ticker_symbol == nil or ticker_symbol == "" then
+		print("WARNING: ticker_symbol is nil in generate_foreign_tax, description_name:", description_name)
+		ticker_symbol = ""
+	else
+
+		-- I originally commented this out because I worried the data might be missing since this is a close-out case.
+		-- I speculated that this data would get filled in better during the initial order creation.
+		-- But I in actual testing, I had data sets where the creation was missing, ultimately leading to missing positions.
+		-- So check for nil and only add if not already in the map. 
+		if nil == inout_position_map[ticker_symbol] then
+			local sec_name = ""
+			local db_entry = ticker_company_map[ticker_symbol]
+			if db_entry then
+				local company_name = db_entry.name
+				if company_name and company_name ~= "" then
+					sec_name = company_name
+					--	print("Found ticker: " .. ticker_symbol .. " with company name: " .. company_name .. " in database")
+				else
+					--	print("Did not find company_name for ticker: " .. ticker_symbol .. " in database")
+				end
+			else
+				--	print("Did not find database entry for ticker: " .. ticker_symbol)
+			end
+
+			local position = [[
+						<STOCKINFO>
+							<SECINFO>
+								<SECID> <!--Security ID-->
+									<UNIQUEID>]] .. ticker_symbol .. [[</UNIQUEID><!--CUSIP for the option -->
+								</SECID>
+								<SECNAME>]] .. sec_name .. [[</SECNAME> 
+								<TICKER>]] .. ticker_symbol .. [[</TICKER> <!--Ticker symbol-->
+							</SECINFO>
+								<!--
+									<ASSETCLASS>LARGESTOCK</ASSETCLASS>
+								-->
+
+						</STOCKINFO>       
+			]]
+			inout_position_map[ticker_symbol] = position
+		end
+	end
+
+
+
 end
 
 
@@ -2469,6 +2548,8 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 
 	elseif action_field == "Cash Dividend" then
 		generate_cash_dividend_capitalgain(cur_transaction, "DIV", inout_transaction_list, inout_position_map, ticker_company_map)
+	elseif action_field == "Qualified Dividend" then
+		generate_cash_dividend_capitalgain(cur_transaction, "DIV", inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Long Term Cap Gain" then
 		generate_cash_dividend_capitalgain(cur_transaction, "CGLONG", inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Short Term Cap Gain" then
@@ -2499,6 +2580,9 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 		generate_foreign_tax(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Foreign Tax Reclaim Adj" then
 		generate_foreign_tax(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+	elseif action_field == "Foreign Tax Paid" then
+		generate_foreign_tax(cur_transaction, inout_transaction_list, inout_position_map, ticker_company_map)
+
 
 	-- bond maturity
 	elseif action_field == "Full Redemption" then
