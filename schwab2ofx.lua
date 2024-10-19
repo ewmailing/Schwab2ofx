@@ -67,6 +67,23 @@ local function split_option_components(cur_transaction)
 	return ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str
 end
 
+-- convenience function to decide if the provided symbol string is an option
+local function is_symbol_string_an_option(cur_transaction)
+	local ticker, exp_year_str, exp_month_str, exp_day_str, strike_price_str, put_or_call_str = split_option_components(cur_transaction)
+
+	if ticker and ticker ~= ""
+		and exp_year_str and exp_year_str ~= ""
+		and exp_month_str and exp_month_str ~= ""
+		and exp_day_str and exp_day_str ~= ""
+		and strike_price_str and strike_price_str ~= ""
+		and put_or_call_str and put_or_call_str ~= ""
+	then
+		return true
+	else
+		return false
+	end
+end
+
 -- canonical option format:
 -- KGC250117C00005500
 -- for KGC 2025 Jan 17 Call $5.50 strike
@@ -2730,6 +2747,12 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 		month, day, year = string.match(date_field, "(%d%d)/(%d%d)/(%d%d%d%d)")
 	end
 
+	-- For debugging	
+--[[
+	print("action_field", action_field)
+	print("symbol_field", symbol_field)
+	print("date_field", date_field)
+--]]
 
 	-- Options
 	if action_field == "Buy to Close" then
@@ -2744,7 +2767,41 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 	elseif action_field == "Assigned" then
 		generate_option_assigned_exercised_expired(cur_transaction, action_field, inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Exchange or Exercise" then
-		generate_option_assigned_exercised_expired(cur_transaction, action_field, inout_transaction_list, inout_position_map, ticker_company_map)
+		-- I hit an edge case. Originally I thought this only got hit for exercising options.
+		-- But with the sanctioned Lukoil, two exchange events happened.
+		-- The transactions I found seem to be no-ops (don't accomplish anything),
+		-- but they are enough to break my code.
+		-- The first event has a "" for symbol.
+		-- The second says "LUKOY".
+		--[=[
+   {
+      "Date": "10/11/2024",
+      "Action": "Exchange or Exercise",
+      "Symbol": "",
+      "Description": "OIL CO LUKOIL PJSC XXXOFAC ESCROW",
+      "Quantity": "92",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": ""
+    },
+    {
+      "Date": "10/11/2024",
+      "Action": "Exchange or Exercise",
+      "Symbol": "LUKOY",
+      "Description": "OIL CO LUKOIL PJSC F",
+      "Quantity": "-92",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": ""
+    },
+		--]=]
+		-- The easiest thing to skip this case.
+		if is_symbol_string_an_option(cur_transaction) then
+			generate_option_assigned_exercised_expired(cur_transaction, action_field, inout_transaction_list, inout_position_map, ticker_company_map)
+		else
+			print("WARNING: 'Exchange or Exercise' for non-options is UNHANDLED", date_field, symbol_field, cur_transaction["Description"])
+		end
+		
 	elseif action_field == "Expired" then
 		generate_option_assigned_exercised_expired(cur_transaction, action_field, inout_transaction_list, inout_position_map, ticker_company_map)
 		
