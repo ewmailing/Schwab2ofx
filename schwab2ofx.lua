@@ -2823,6 +2823,35 @@ local function generate_ofx_brokerage_transaction(cur_transaction, inout_transac
 		generate_cash_dividend_capitalgain(cur_transaction, "CGLONG", inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Short Term Cap Gain" then
 		generate_cash_dividend_capitalgain(cur_transaction, "CGSHORT", inout_transaction_list, inout_position_map, ticker_company_map)
+
+	-- Short Term Cap Gain Reinvest is a strange one because it seems to be immediately followed by Reinvest Shares.
+	-- Short Term Cap Gain Reinvest doesn't contain enough info to actually do the reinvest by itself.
+	-- So I think I need to treat it as a Short Term Cap Gain
+	--[=[
+    {
+      "Date": "12/31/2024",
+      "Action": "Short Term Cap Gain Reinvest",
+      "Symbol": "SNSXX",
+      "Description": "SCHWAB US TREASURY MONEY INVESTOR",
+      "Quantity": "",
+      "Price": "",
+      "Fees & Comm": "",
+      "Amount": "$0.32"
+    },
+    {
+      "Date": "12/31/2024",
+      "Action": "Reinvest Shares",
+      "Symbol": "SNSXX",
+      "Description": "SCHWAB US TREASURY MONEY INVESTOR",
+      "Quantity": "0.32",
+      "Price": "$1.00",
+      "Fees & Comm": "",
+      "Amount": "-$0.32"
+    },
+	--]=]
+	elseif action_field == "Short Term Cap Gain Reinvest" then
+		generate_cash_dividend_capitalgain(cur_transaction, "CGSHORT", inout_transaction_list, inout_position_map, ticker_company_map)
+
 	elseif action_field == "Qual Div Reinvest" then
 		generate_cash_dividend_capitalgain(cur_transaction, "DIV", inout_transaction_list, inout_position_map, ticker_company_map)
 	elseif action_field == "Qual Div Reinvest Adj" then
